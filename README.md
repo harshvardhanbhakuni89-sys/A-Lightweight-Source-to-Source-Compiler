@@ -1,5 +1,9 @@
 # Lightweight Source-to-Source Compiler
 
+## Team Members
+- Harsh Vardhan 
+- Sheezan Malik
+
 ## 📌 Description
 This project is a simple compiler visualizer that demonstrates how source code is transformed step-by-step. It helps in understanding the basic working of a compiler, including parsing and transformation.
 
