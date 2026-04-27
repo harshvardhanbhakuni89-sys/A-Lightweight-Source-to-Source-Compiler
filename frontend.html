@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Compiler Visualizer</title>
+
+<style>
+body {
+  font-family: Arial;
+  background: #0f172a;
+  color: white;
+}
+
+.container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 20px;
+}
+
+.card {
+  background: #020617;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+textarea {
+  width: 100%;
+  height: 150px;
+}
+
+button {
+  margin-top: 10px;
+  padding: 10px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.success { color: lightgreen; }
+.error { color: red; }
+
+#astCanvas {
+  background: #020617;
+  border-radius: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h2 style="text-align:center;">Compiler Visualizer</h2>
+
+<div class="container">
+
+<div class="card">
+<h3>Python Input</h3>
+<textarea id="input"></textarea>
+<button onclick="runAll()">Compile</button>
+</div>
+
+<div class="card">
+<h3>Generated C Code</h3>
+<textarea id="output" readonly></textarea>
+</div>
+
+<div class="card">
+<h3>Tokens</h3>
+<div id="lex"></div>
+</div>
+
+<div class="card">
+<h3>Semantic</h3>
+<div id="semantic"></div>
+</div>
+
+<div class="card">
+<h3>Errors</h3>
+<div id="errors"></div>
+</div>
+
+<div class="card">
+<h3>Symbol Table</h3>
+<div id="symbol"></div>
+</div>
+
+<div class="card">
+<h3>Three Address Code</h3>
+<div id="tac"></div>
+</div>
+
+<div class="card">
+<h3>AST Visualization</h3>
+<svg id="astCanvas" width="500" height="300"></svg>
+</div>
+
+</div>
+
+<script>
+
+async function runAll(){
+  try{
+
+    const input = document.getElementById("input").value;
+
+    const res = await fetch("http://127.0.0.1:5000/compile", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({code: input})
+    });
+
+    const data = await res.json();
+
+    // TOKENS
+    document.getElementById("lex").innerHTML =
+      data.tokens.map(t => {
+
+        if(t.startsWith("IDENT"))
+          return "🔹 Variable → " + t;
+
+        if(t.startsWith("NUM"))
+          return "🔸 Number → " + t;
+
+        if(t.startsWith("OP"))
+          return "➕ Operator → " + t;
+
+        if(t === "ASSIGN")
+          return "🟰 Assignment (=)";
+
+        if(t === "PRINT")
+          return "🖨 Print";
+
+        return t;
+
+      }).join("<br>");
+
+
+    // ERRORS
+    if(data.errors.length > 0){
+      document.getElementById("errors").innerHTML =
+        data.errors.map(e => "❌ " + e).join("<br>");
+    } else {
+      document.getElementById("errors").innerHTML =
+        "<span class='success'>✔ No Errors</span>";
+    }
+
+
+    // SEMANTIC STATUS
+    document.getElementById("semantic").innerHTML =
+      data.errors.length
+      ? "<span class='error'>Issues Found</span>"
+      : "<span class='success'>✔ Correct</span>";
+
+
+    // SYMBOL TABLE
+    let table = "<table border='1' style='width:100%; text-align:center'>";
+    table += "<tr><th>Variable</th><th>Type</th></tr>";
+
+    for(let k in data.symbol_table){
+      table += `<tr><td>${k}</td><td>${data.symbol_table[k]}</td></tr>`;
+    }
+
+    table += "</table>";
+
+    document.getElementById("symbol").innerHTML = table;
+
+
+    // TAC
+    document.getElementById("tac").innerHTML =
+      data.tac.join("<br>");
+
+
+    // C CODE
+    document.getElementById("output").value =
+      data.c_code;
+
+
+    // AST
+    drawAST(data.ast);
+
+  } catch(e){
+    alert("Error: " + e);
+  }
+}
+
+
+// NODE
+function createNode(svg, x, y, text){
+  let circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+  circle.setAttribute("cx", x);
+  circle.setAttribute("cy", y);
+  circle.setAttribute("r", 20);
+  circle.setAttribute("fill", "#3b82f6");
+
+  svg.appendChild(circle);
+
+  let label = document.createElementNS("http://www.w3.org/2000/svg","text");
+  label.setAttribute("x", x);
+  label.setAttribute("y", y + 5);
+  label.setAttribute("fill", "white");
+  label.setAttribute("text-anchor", "middle");
+
+  label.textContent = text;
+  svg.appendChild(label);
+}
+
+
+// LINE
+function drawLine(svg, x1, y1, x2, y2){
+  let line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1);
+  line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2);
+  line.setAttribute("y2", y2);
+  line.setAttribute("stroke", "white");
+
+  svg.appendChild(line);
+}
+
+
+// AST
+
+  function drawAST(astData){
+  const svg = document.getElementById("astCanvas");
+  svg.innerHTML = "";
+
+  // only final expression
+  let node = astData[astData.length - 1];
+
+  let centerX = 250;
+  let startY = 60;
+
+  createNode(svg, centerX, startY, "=");
+
+  createNode(svg, centerX - 120, startY + 80, node.left);
+  drawLine(svg, centerX, startY, centerX - 120, startY + 80);
+
+  if(typeof node.right === "object"){
+
+    createNode(svg, centerX + 120, startY + 80, node.right.op);
+    drawLine(svg, centerX, startY, centerX + 120, startY + 80);
+
+    createNode(svg, centerX + 60, startY + 160, node.right.left);
+    drawLine(svg, centerX + 120, startY + 80, centerX + 60, startY + 160);
+
+    createNode(svg, centerX + 180, startY + 160, node.right.right);
+    drawLine(svg, centerX + 120, startY + 80, centerX + 180, startY + 160);
+  }
+}
+
+</script>
+
+</body>
+</html>
